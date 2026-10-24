@@ -50,6 +50,11 @@ runs:
     #       exit 1
     #     fi
 
+    - name: 'Patch SELinux Hide / LTO'
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel
+      run: bash ${{ github.workspace }}/.github/scripts/patch_selinux_hide.sh
+
     - name: 'Build Kernel'
       shell: bash
       working-directory: ${{ github.workspace }}/kernel
