@@ -55,4 +55,29 @@ if ksu_dirs:
                 print("Patched selinux_hide.c to keep selinuxfs hooks alive:",p)
             else:
                 print("selinux_hide.c found but no pattern matched:",p)
+    # lsm_hook: robust hlist match by address range (CFI/LTO)
+    for root,_,files in os.walk(ksu_dir):
+        for fn in files:
+            if fn != "lsm_hook.c": continue
+            p=os.path.join(root,fn)
+            with open(p) as f: c=f.read()
+            orig=c
+            helper='''static bool ksu_lsm_origin_in_target(void *origin, void *target) {
+    unsigned long size = 0;
+    if (origin == target)
+        return true;
+    if (!kallsyms_lookup_size_offset((unsigned long)target, &size, NULL) || !size)
+        size = 1;
+    return origin >= target && (unsigned long)origin < (unsigned long)target + size;
+}
+
+'''
+            if "ksu_lsm_origin_in_target" not in c:
+                c=c.replace("int ksu_lsm_hook(struct ksu_lsm_hook *hook)", helper+"int ksu_lsm_hook(struct ksu_lsm_hook *hook)",1)
+            c=c.replace("if (current_origin == target) {", "if (ksu_lsm_origin_in_target(current_origin, target)) {")
+            if c!=orig:
+                with open(p,"w") as f: f.write(c)
+                print("Patched lsm_hook.c range match:",p)
+            else:
+                print("lsm_hook.c found but no change:",p)
 PY
