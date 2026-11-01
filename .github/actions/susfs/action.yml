@@ -116,12 +116,16 @@ runs:
           "import json,sys; d=json.load(sys.stdin); print(next(a['browser_download_url'] for a in d.get('assets',[]) if a['name'].endswith('.apk')))" 2>/dev/null || true)"
         [ -n "$REL_URL" ] || { echo "ERROR: no apk asset on FinaSU latest release; cannot derive manager cert" >&2; exit 1; }
         curl -sL --fail --retry 3 --max-time 300 -H "Authorization: Bearer ${GH_TOKEN:-}" -o "$REL_APK" "$REL_URL"
-        CERT_INFO="$(python3 "$GITHUB_WORKSPACE/.github/actions/susfs/finasu_compat/extract_manager_cert.py" "$REL_APK" | head -n1)"
+        CERT_INFO="$(python3 "$GITHUB_WORKSPACE/.github/actions/susfs/finasu_compat/extract_manager_cert.py" "$REL_APK" | sed -n '1p')"
         [ -n "$CERT_INFO" ] || { echo "ERROR: cert extraction failed" >&2; exit 1; }
         CERT_SIZE="$(echo "$CERT_INFO" | awk '{print $1}')"
         CERT_HASH="$(echo "$CERT_INFO" | awk '{print $2}')"
         echo "Injecting FinaSU manager cert into second trust slot: size=$CERT_SIZE sha256=$CERT_HASH"
         if grep -q '^KSU_EXPECTED_SIZE2 := ' FinaSU/kernel/Kbuild; then
+          EXISTING_HASH="$(grep '^KSU_EXPECTED_HASH2 := ' FinaSU/kernel/Kbuild | head -n1 | awk '{print $3}' | tr -d '"')"
+          if [ -n "$EXISTING_HASH" ] && [ "$EXISTING_HASH" != "$CERT_HASH" ]; then
+            echo "WARNING: existing cert hash $EXISTING_HASH differs from downloaded $CERT_HASH" >&2
+          fi
           echo "Cert already injected; skipping."
         else
           awk -v size="$CERT_SIZE" -v hash="$CERT_HASH" '
